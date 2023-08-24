@@ -1,1 +1,2 @@
-pub mod alipay_global;
+pub mod alipay;
+pub mod models;

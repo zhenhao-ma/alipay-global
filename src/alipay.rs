@@ -13,9 +13,10 @@ use uuid::Uuid;
 
 #[derive(Serialize)]
 pub struct OrderAmount {
-    currency: ,
-    value: String,
+    currency: String,
+    value: Number,
 }
+
 #[derive(Debug)]
 pub struct Info {
     pub payment_request_id: String,
