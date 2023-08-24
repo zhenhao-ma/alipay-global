@@ -40,7 +40,35 @@ pub struct PaymentCashierRequest {
 
 impl From<PaymentCashier> for PaymentCashierRequest {
     fn from(value: PaymentCashier) -> Self {
-        
+        let PaymentCashier {
+            payment_request_id,
+            currency,
+            amount,
+            reference_order_id,
+            order_description,
+            terminal_type,
+        } = value;
+        let roi = reference_order_id.unwrap_or(String::from(""));
+        let od = order_description.unwrap_or(String::from(""));
+        let tt = terminal_type.unwrap_or(String::from(""));
+        let a = OrderAmount {
+            currency,
+            value: amount,
+        };
+        Self {
+            product_code: String::from("CASHIER_PAYMENT"),
+            payment_request_id,
+            order: Order {
+                order_amount: a,
+                order_description: (),
+                reference_order_id: (),
+            },
+            payment_amount: (),
+            payment_method: (),
+            payment_redirect_url: (),
+            payment_notify_url: (),
+            settlement_strategy: (),
+        }
     }
 }
 
@@ -92,6 +120,41 @@ pub struct OrderAmount {
     /// Value range: 1 - unlimited
     pub value: i32,
 }
+
+impl From<&PaymentCashier> for Or {
+    fn from(value: PaymentCashier) -> Self {
+        let PaymentCashier {
+            payment_request_id,
+            currency,
+            amount,
+            reference_order_id,
+            order_description,
+            terminal_type,
+        } = value;
+        let roi = reference_order_id.unwrap_or(String::from(""));
+        let od = order_description.unwrap_or(String::from(""));
+        let tt = terminal_type.unwrap_or(String::from(""));
+        let a = OrderAmount {
+            currency,
+            value: amount,
+        };
+        Self {
+            product_code: String::from("CASHIER_PAYMENT"),
+            payment_request_id,
+            order: Order {
+                order_amount: a,
+                order_description: (),
+                reference_order_id: (),
+            },
+            payment_amount: (),
+            payment_method: (),
+            payment_redirect_url: (),
+            payment_notify_url: (),
+            settlement_strategy: (),
+        }
+    }
+}
+
 /// The payment method that is used to collect the payment by the merchant or acquirer.
 /// skip attributes
 /// - paymentMethodId
@@ -122,6 +185,7 @@ pub struct Order {
     pub order_description: String,
     pub reference_order_id: String,
 }
+
 /// The settlement strategy for the payment request.
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
