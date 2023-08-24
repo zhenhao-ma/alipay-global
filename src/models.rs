@@ -24,23 +24,23 @@ pub struct PaymentCashier {
 #[serde(rename_all = "camelCase")]
 pub struct PaymentCashierRequest {
     /// Represents the payment product that is being used, which is stipulated in the contract. For Cashier Payment, the value is fixed as CASHIER_PAYMENT.
-    pub productCode: String,
+    pub product_code: String,
     /// The unique ID assigned by a merchant to identify a payment request. Alipay uses this field for idempotence control.
     /// More information about this field:
     /// This field is an API idempotency field. For payment requests that are initiated with the same value of paymentRequestId and reach a final status of S or F, the same result is to be returned for the request.
     /// Maximum length: 64 characters
-    pub paymentRequestId: String,
+    pub payment_request_id: String,
     pub order: Order,
-    pub paymentAmount: OrderAmount,
-    pub paymentMethod: PaymentMethod,
-    pub paymentRedirectUrl: String,
-    pub paymentNotifyUrl: String,
-    pub settlementStrategy: SettlementStrategy,
+    pub payment_amount: OrderAmount,
+    pub payment_method: PaymentMethod,
+    pub payment_redirect_url: String,
+    pub payment_notify_url: String,
+    pub settlement_strategy: SettlementStrategy,
 }
 
 impl From<PaymentCashier> for PaymentCashierRequest {
     fn from(value: PaymentCashier) -> Self {
-
+        
     }
 }
 
@@ -60,13 +60,14 @@ impl From<PaymentCashier> for PaymentCashierRequest {
 /// - deviceId
 /// - extendInfo
 #[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Env {
     /// Terminal type of which the merchant service applies to. Valid values are:
     /// WEB: The client-side terminal type is a website, which is opened via a PC browser.
     /// WAP: The client-side terminal type is an H5 page, which is opened via a mobile browser.
     /// APP: The client-side terminal type is a mobile application.
     /// MINI_APP: The terminal type of the merchant side is a mini program on the mobile phone.  
-    terminalType: TerminalType,
+    terminal_type: TerminalType,
 }
 
 #[derive(Serialize)]
@@ -79,6 +80,7 @@ pub enum TerminalType {
 
 /// The order amount of the merchant that directly provides services or goods to the customer. This field is used for user consumption records display or payment results page.
 #[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct OrderAmount {
     /// The transaction currency that is specified in the contract. A 3-letter currency code that follows the ISO 4217 standard.
     /// More information about this field:
@@ -97,11 +99,12 @@ pub struct OrderAmount {
 /// - customerId
 /// - extendInfo
 #[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct PaymentMethod {
     /// The payment method type that is included in payment method options. By specifying the value of this parameter, you can receive the cashier URL of the specified payment method returned by Alipay. See Payment methods to check the valid values.
     /// More information about this field:
     /// Maximum length: 64 characters
-    pub paymentMethodType: String,
+    pub payment_method_type: String,
 }
 /// The order information, such as buyer, merchant, goods, amount, shipping information, and purchase environment. This field is used for different purposes:
 /// During the payment process, this field is mainly used by Alipay for risk control or anti-money laundering.
@@ -112,15 +115,17 @@ pub struct PaymentMethod {
 /// - merchant
 /// - extendInfo
 #[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Order {
     /// The order amount of the merchant that directly provides services or goods to the customer. This field is used for user consumption records display or payment results page.
-    pub orderAmount: OrderAmount,
-    pub orderDescription: String,
-    pub referenceOrderId: String,
+    pub order_amount: OrderAmount,
+    pub order_description: String,
+    pub reference_order_id: String,
 }
 /// The settlement strategy for the payment request.
 #[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct SettlementStrategy {
     /// The ISO currency code of the currency that the merchant wants to be settled against. The field is required if the merchant signed up for multiple currencies to settle.
-    settlementCurrency: String,
+    settlement_currency: String,
 }
