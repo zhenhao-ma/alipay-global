@@ -21,7 +21,7 @@ pub fn rsa_sign(content: &str, private_key: &str, hash_type: HashType) -> String
 
     // create sha256 obj
     let mut hasher = Sha256::new();
-    
+
     // input content
     hasher.input_str(content);
 

@@ -1,4 +1,14 @@
 use serde::Serialize;
+use std::path::Path;
+
+/// Alipay Client Info and Secret
+pub struct AlipayClient {
+    client_id: String,
+    sandbox: bool,
+    private_key: Option<String>,
+    private_key_der_file: Option<Box<Path>>,
+    private_key_per_file: Option<Box<Path>>
+}
 
 /// Minimum Information to initialize a payment cashier
 #[derive(Serialize)]
@@ -6,9 +16,11 @@ pub struct PaymentCashier {
     pub payment_request_id: String,
     pub currency: String,
     pub amount: i32,
+    pub redict_url: String,
+    pub notifiy_url: String,
     pub reference_order_id: Option<String>,
     pub order_description: Option<String>,
-    pub terminal_type: Option<String>,
+    pub terminal_type: Option<TerminalType>,
 }
 
 /// Payment Cashier Request Object
@@ -42,32 +54,23 @@ impl From<PaymentCashier> for PaymentCashierRequest {
     fn from(value: PaymentCashier) -> Self {
         let PaymentCashier {
             payment_request_id,
-            currency,
-            amount,
-            reference_order_id,
-            order_description,
-            terminal_type,
+            redict_url,
+            notifiy_url,
+            ..
         } = value;
-        let roi = reference_order_id.unwrap_or(String::from(""));
-        let od = order_description.unwrap_or(String::from(""));
-        let tt = terminal_type.unwrap_or(String::from(""));
-        let a = OrderAmount {
-            currency,
-            value: amount,
-        };
+        let order = Order::from(&value);
+        let payment_amount = OrderAmount::from(&value);
+        let payment_method = PaymentMethod::from(&value);
+        let settlement_strategy = SettlementStrategy::from(&value);
         Self {
             product_code: String::from("CASHIER_PAYMENT"),
             payment_request_id,
-            order: Order {
-                order_amount: a,
-                order_description: (),
-                reference_order_id: (),
-            },
-            payment_amount: (),
-            payment_method: (),
-            payment_redirect_url: (),
-            payment_notify_url: (),
-            settlement_strategy: (),
+            order,
+            payment_amount,
+            payment_method,
+            payment_redirect_url: redict_url,
+            payment_notify_url: notifiy_url,
+            settlement_strategy,
         }
     }
 }
@@ -98,6 +101,14 @@ pub struct Env {
     terminal_type: TerminalType,
 }
 
+impl From<&PaymentCashier> for Env {
+    fn from(value: &PaymentCashier) -> Self {
+        let PaymentCashier { terminal_type, .. } = value;
+        let tt = terminal_type.unwrap_or(TerminalType::WEB);
+        Self { terminal_type: tt }
+    }
+}
+
 #[derive(Serialize)]
 pub enum TerminalType {
     WEB,
@@ -121,36 +132,14 @@ pub struct OrderAmount {
     pub value: i32,
 }
 
-impl From<&PaymentCashier> for Or {
-    fn from(value: PaymentCashier) -> Self {
+impl From<&PaymentCashier> for OrderAmount {
+    fn from(value: &PaymentCashier) -> Self {
         let PaymentCashier {
-            payment_request_id,
-            currency,
-            amount,
-            reference_order_id,
-            order_description,
-            terminal_type,
+            currency, amount, ..
         } = value;
-        let roi = reference_order_id.unwrap_or(String::from(""));
-        let od = order_description.unwrap_or(String::from(""));
-        let tt = terminal_type.unwrap_or(String::from(""));
-        let a = OrderAmount {
-            currency,
-            value: amount,
-        };
         Self {
-            product_code: String::from("CASHIER_PAYMENT"),
-            payment_request_id,
-            order: Order {
-                order_amount: a,
-                order_description: (),
-                reference_order_id: (),
-            },
-            payment_amount: (),
-            payment_method: (),
-            payment_redirect_url: (),
-            payment_notify_url: (),
-            settlement_strategy: (),
+            value: amount.clone(),
+            currency: currency.clone(),
         }
     }
 }
@@ -169,6 +158,15 @@ pub struct PaymentMethod {
     /// Maximum length: 64 characters
     pub payment_method_type: String,
 }
+
+impl From<&PaymentCashier> for PaymentMethod {
+    fn from(value: &PaymentCashier) -> Self {
+        Self {
+            payment_method_type: String::from("ALIPAY_CN"),
+        }
+    }
+}
+
 /// The order information, such as buyer, merchant, goods, amount, shipping information, and purchase environment. This field is used for different purposes:
 /// During the payment process, this field is mainly used by Alipay for risk control or anti-money laundering.
 /// After the payment is completed, this field is used for recording and reporting purposes such as purchase tracking and regulatory reporting.
@@ -186,10 +184,38 @@ pub struct Order {
     pub reference_order_id: String,
 }
 
+impl From<&PaymentCashier> for Order {
+    fn from(value: &PaymentCashier) -> Self {
+        let PaymentCashier {
+            reference_order_id,
+            order_description,
+            ..
+        } = value;
+        let roi = reference_order_id.unwrap_or(String::from(""));
+        let od = order_description.unwrap_or(String::from(""));
+        let order_amount = OrderAmount::from(value);
+        Self {
+            order_amount,
+            order_description: od,
+            reference_order_id: roi,
+        }
+    }
+}
+
 /// The settlement strategy for the payment request.
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SettlementStrategy {
     /// The ISO currency code of the currency that the merchant wants to be settled against. The field is required if the merchant signed up for multiple currencies to settle.
     settlement_currency: String,
+}
+
+impl From<&PaymentCashier> for SettlementStrategy {
+    fn from(value: &PaymentCashier) -> Self {
+        let PaymentCashier { currency, .. } = value;
+
+        Self {
+            settlement_currency: currency.clone(),
+        }
+    }
 }
