@@ -1,6 +1,6 @@
 [package]
 name = "alipay-global"
-version = "0.1.1"
+version = "0.1.2"
 edition = "2021"
 description = "Use Alipay Global in a less painful way"
 license = "MIT OR Apache-2.0"
