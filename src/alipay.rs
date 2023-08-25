@@ -1,5 +1,6 @@
-mod sign;
+use crate::sign;
 
+use crate::models::{AlipayClient, PaymentCashier};
 use chrono::{self, DateTime, Utc};
 use serde::Serialize;
 use serde_json::{self, Number};
@@ -11,51 +12,49 @@ use uuid::Uuid;
 
 // use crate::services::alipay_gb::model::{AlipayPaymentPublic};
 
-#[derive(Serialize)]
-pub struct OrderAmount {
-    currency: String,
-    value: Number,
-}
+// #[derive(Serialize)]
+// pub struct OrderAmount {
+//     currency: String,
+//     value: Number,
+// }
 
-#[derive(Debug)]
-pub struct Info {
-    pub payment_request_id: String,
-    pub timestamp: i64,
-    pub datetime: chrono::DateTime<chrono::Utc>,
-    pub sign: String,
-    pub request_body: serde_json::Value,
-}
+// #[derive(Debug)]
+// pub struct Info {
+//     pub payment_request_id: String,
+//     pub timestamp: i64,
+//     pub datetime: chrono::DateTime<chrono::Utc>,
+//     pub sign: String,
+//     pub request_body: serde_json::Value,
+// }
 
-#[derive(Debug)]
-pub struct SendInfo {
-    pub send_request_time: chrono::DateTime<chrono::Utc>,
-}
+// #[derive(Debug)]
+// pub struct SendInfo {
+//     pub send_request_time: chrono::DateTime<chrono::Utc>,
+// }
 
-pub struct AlipayClient {
-    client_id: String,
+// pub struct AlipayClient {
+//     client_id: String,
 
-}
+// }
 
-pub struct AlipaySign {
-    order_amount: Number,
-    currency: String,
-    notify_url: Option<String>,
-    redirect_url: Option<String>,
-    payment_request_id: Option<String>,
-    datetime: Option<DateTime<Utc>>,
-    sandbox: Option<bool>
-}
-
-
+// pub struct AlipaySign {
+//     order_amount: Number,
+//     currency: String,
+//     notify_url: Option<String>,
+//     redirect_url: Option<String>,
+//     payment_request_id: Option<String>,
+//     datetime: Option<DateTime<Utc>>,
+//     sandbox: Option<bool>
+// }
 
 pub fn alipay_pay(
-    alipay_sign: AlipaySign
+    alipay_sign: AlipaySign, 
     // request_url: &String,
-    // order_amount: OrderAmount,
-    // notify_url: Option<&str>,
-    // redirect_url: Option<&str>,
-    // payment_request_id: Option<&str>,
-    // datetime: Option<DateTime<Utc>>,
+                             // order_amount: OrderAmount,
+                             // notify_url: Option<&str>,
+                             // redirect_url: Option<&str>,
+                             // payment_request_id: Option<&str>,
+                             // datetime: Option<DateTime<Utc>>,
 ) -> Info {
     let request_path = String::from("/ams/sandbox/api/v1/payments/pay");
     let request_url = String::from("https://open-global.alipay.com") + &request_path;

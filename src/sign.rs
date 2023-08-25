@@ -2,22 +2,16 @@ extern crate crypto;
 extern crate rsa;
 
 use rsa::Hash;
-use rsa::{PaddingScheme, RSAPrivateKey};
+use rsa::PaddingScheme;
 
 use crypto::digest::Digest;
 use crypto::sha2::Sha256;
 
-pub enum HashType {
-    Sha1,
-    Sha256,
-}
+use crate::models::HasPrivateKey;
 
-pub fn rsa_sign(content: &str, private_key: &str, hash_type: HashType) -> String {
-    // format private key
-    let der_encoded = private_key;
-    let der_bytes = base64::decode(der_encoded).expect("failed to decode base64 content");
+pub fn rsa_sign(content: &str, private_key: &impl HasPrivateKey, hash: Option<Hash>) -> String {
     // get private obj
-    let private_key = RSAPrivateKey::from_pkcs1(&der_bytes).expect("failed to parse key");
+    let pk = private_key.get_private_key().unwrap();
 
     // create sha256 obj
     let mut hasher = Sha256::new();
@@ -30,17 +24,7 @@ pub fn rsa_sign(content: &str, private_key: &str, hash_type: HashType) -> String
     hasher.result(&mut bytes);
 
     // sign the content
-    let hash;
-    match hash_type {
-        HashType::Sha1 => hash = Hash::SHA1,
-        HashType::Sha256 => hash = Hash::SHA2_256,
-    }
-    let sign_result = private_key.sign(
-        PaddingScheme::PKCS1v15Sign {
-            hash: Option::from(hash),
-        },
-        &bytes,
-    );
+    let sign_result = pk.sign(PaddingScheme::PKCS1v15Sign { hash }, &bytes);
     // convert result to base64
     let vec = sign_result.expect("create sign error for base64");
 

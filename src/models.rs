@@ -1,13 +1,32 @@
+use pkcs1::Error as Pkcs1Error;
+use rsa::{errors::Error as RSAError, RSAPrivateKey};
 use serde::Serialize;
-use std::path::Path;
+use serde_json::Value;
 
+use std::fs::read_to_string;
+use std::path::{Path, PathBuf};
 /// Alipay Client Info and Secret
-pub struct AlipayClient {
-    client_id: String,
-    sandbox: bool,
-    private_key: Option<String>,
-    private_key_der_file: Option<Box<Path>>,
-    private_key_per_file: Option<Box<Path>>
+pub struct AlipayClientSecret {
+    pub client_id: String,
+    pub sandbox: bool,
+    pub private_key_pem: Option<String>,
+    pub private_key_pem_file: Option<Box<PathBuf>>,
+}
+
+impl HasPrivateKey for AlipayClientSecret {
+    fn get_private_key(&self) -> Result<RSAPrivateKey, RSAError> {
+        let der_bytes: Vec<u8>;
+        if (self.private_key_pem_file.is_some()) {
+            let s = read_to_string(self.private_key_pem_file.clone().unwrap().as_path()).unwrap();
+            der_bytes = base64::decode(s).expect("failed to decode base64 content");
+        } else {
+            der_bytes = base64::decode(&self.private_key_pem.clone().unwrap())
+                .expect("failed to decode base64 content");
+        }
+
+        // get private obj
+        return RSAPrivateKey::from_pkcs1(&der_bytes);
+    }
 }
 
 /// Minimum Information to initialize a payment cashier
@@ -18,9 +37,19 @@ pub struct PaymentCashier {
     pub amount: i32,
     pub redict_url: String,
     pub notifiy_url: String,
+    pub order_description: String,
     pub reference_order_id: Option<String>,
-    pub order_description: Option<String>,
     pub terminal_type: Option<TerminalType>,
+}
+
+/// A Trait contains all data for alipay signing
+pub trait Signable {
+    fn get_value(&self) -> Value;
+}
+
+/// A Trait contains private key data
+pub trait HasPrivateKey {
+    fn get_private_key(&self) -> Result<RSAPrivateKey, RSAError>;
 }
 
 /// Payment Cashier Request Object
@@ -48,30 +77,71 @@ pub struct PaymentCashierRequest {
     pub payment_redirect_url: String,
     pub payment_notify_url: String,
     pub settlement_strategy: SettlementStrategy,
+    pub env: Env,
 }
 
-impl From<PaymentCashier> for PaymentCashierRequest {
-    fn from(value: PaymentCashier) -> Self {
+impl PaymentCashierRequest {
+    pub fn to_string(&self) -> String {
+        serde_json::to_value(self).unwrap().to_string()
+    }
+}
+
+impl From<&PaymentCashier> for PaymentCashierRequest {
+    fn from(value: &PaymentCashier) -> Self {
         let PaymentCashier {
             payment_request_id,
             redict_url,
             notifiy_url,
             ..
         } = value;
-        let order = Order::from(&value);
-        let payment_amount = OrderAmount::from(&value);
-        let payment_method = PaymentMethod::from(&value);
-        let settlement_strategy = SettlementStrategy::from(&value);
+        let order = Order::from(value);
+        let payment_amount = OrderAmount::from(value);
+        let payment_method = PaymentMethod::from(value);
+        let settlement_strategy = SettlementStrategy::from(value);
+        let env = Env::from(value);
         Self {
             product_code: String::from("CASHIER_PAYMENT"),
-            payment_request_id,
+            payment_request_id: payment_request_id.clone(),
             order,
             payment_amount,
             payment_method,
-            payment_redirect_url: redict_url,
-            payment_notify_url: notifiy_url,
+            payment_redirect_url: redict_url.clone(),
+            payment_notify_url: notifiy_url.clone(),
             settlement_strategy,
+            env,
         }
+    }
+}
+
+impl Signable for PaymentCashierRequest {
+    fn get_value(&self) -> Value {
+        serde_json::to_value(self).unwrap()
+    }
+}
+
+pub struct RequestEnv {
+    pub path: String,
+    pub domain: String,
+}
+impl From<&AlipayClientSecret> for RequestEnv {
+    fn from(value: &AlipayClientSecret) -> Self {
+        if value.sandbox {
+            Self {
+                path: String::from("/ams/sandbox/api/v1/payments/pay"),
+                domain: String::from("https://open-global.alipay.com"),
+            }
+        } else {
+            Self {
+                path: String::from("/ams/api/v1/payments/pay"),
+                domain: String::from("https://open-global.alipay.com"),
+            }
+        }
+    }
+}
+
+impl RequestEnv {
+    pub fn get_request_url(&self) -> String {
+        self.domain.clone() + &self.path
     }
 }
 
@@ -104,12 +174,12 @@ pub struct Env {
 impl From<&PaymentCashier> for Env {
     fn from(value: &PaymentCashier) -> Self {
         let PaymentCashier { terminal_type, .. } = value;
-        let tt = terminal_type.unwrap_or(TerminalType::WEB);
+        let tt = terminal_type.clone().unwrap_or(TerminalType::WEB);
         Self { terminal_type: tt }
     }
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Clone, Copy)]
 pub enum TerminalType {
     WEB,
     WAP,
@@ -191,8 +261,8 @@ impl From<&PaymentCashier> for Order {
             order_description,
             ..
         } = value;
-        let roi = reference_order_id.unwrap_or(String::from(""));
-        let od = order_description.unwrap_or(String::from(""));
+        let roi = reference_order_id.clone().unwrap_or(String::from(""));
+        let od = order_description.clone();
         let order_amount = OrderAmount::from(value);
         Self {
             order_amount,
