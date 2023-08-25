@@ -1,10 +1,9 @@
-use crate::models::PaymentCashierRequest;
-
-use super::models::{AlipayClientSecret, PaymentCashier, RequestEnv, Signable};
+use super::errors::Error;
+use super::models::{AlipayClientSecret, PaymentCashier, RequestEnv, Response, Signable};
 use super::sign;
+use crate::models::PaymentCashierRequest;
 use chrono::{self};
 use rsa::Hash;
-use std::env;
 use ureq;
 use urlencoding;
 
@@ -25,13 +24,26 @@ fn get_alipay_raw_request(
     )
 }
 
+pub fn parse_response(response_body: String) -> Result<Response, Error> {
+    let parsed: Response = serde_json::from_str::<Response>(&response_body).map_err(|e| {
+        Error::Unknown(format!(
+            "Failed to parse response body into base object: {}",
+            e.to_string()
+        ))
+    })?;
+    let e = parsed.get_error();
+    match e {
+        Some(e) => Err(e),
+        None => Ok(parsed),
+    }
+}
+
 pub fn sign(secret: &AlipayClientSecret, signable: &impl Signable) -> String {
-    let RequestEnv { path, domain } = RequestEnv::from(secret);
+    let RequestEnv { path, .. } = RequestEnv::from(secret);
     let AlipayClientSecret { client_id, .. } = secret;
 
     let utc = chrono::Utc::now();
     let iso_utc = utc.to_rfc3339_opts(chrono::SecondsFormat::Secs, false);
-    let ts_milliseconds = utc.timestamp() * 1000;
 
     let content = get_alipay_raw_request("POST", &path, &client_id, &iso_utc, signable);
     sign::rsa_sign(&content, secret, Some(Hash::SHA2_256))
@@ -40,7 +52,7 @@ pub fn sign(secret: &AlipayClientSecret, signable: &impl Signable) -> String {
 pub fn req_post(
     secret: &AlipayClientSecret,
     payment_cashier: &PaymentCashier,
-) -> Result<String, ureq::Error> {
+) -> Result<Response, Error> {
     let request_env = RequestEnv::from(secret);
     let request_url = request_env.get_request_url();
     let payment_cashier_request = PaymentCashierRequest::from(payment_cashier);
@@ -62,12 +74,8 @@ pub fn req_post(
             &chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, false),
         )
         .send_string(&payment_cashier_request.to_string())?;
-    println!("Sent String: {}", payment_cashier_request.to_string());
-    println!("status_text: {}", resp.status_text());
-    println!("Status: {}", resp.status());
-    let response_body = resp.into_string()?;
-    println!("Response body:\n{}", response_body);
-    Ok(response_body)
+    let response_body = resp.into_string().map_err(|e| Error::from(e))?;
+    parse_response(response_body)
 }
 
 #[cfg(test)]
@@ -100,6 +108,7 @@ mod tests {
             order_description: String::from("order_description"),
             terminal_type: Some(TerminalType::WEB),
         };
-        req_post(&secret, &payment_cashier);
+        let r = req_post(&secret, &payment_cashier);
+        print!("response: \n{:#?}\n", r);
     }
 }
