@@ -3,7 +3,6 @@ use chrono::{DateTime, Utc};
 use rsa::{errors::Error as RSAError, RSAPrivateKey};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use serde_with::{serde_as, DisplayFromStr};
 use std::fs::read_to_string;
 use std::path::PathBuf;
 use std::string::ToString;
@@ -35,7 +34,7 @@ impl HasPrivateKey for AlipayClientSecret {
 
 /// Minimum Information to initialize a payment cashier
 #[derive(Serialize)]
-pub struct PaymentCashier {
+pub struct CashierPaymentSimple {
     pub payment_request_id: String,
     pub currency: String,
     pub amount: i32,
@@ -58,6 +57,7 @@ pub trait HasPrivateKey {
 
 /// Payment Cashier Request Object
 /// see: https://global.alipay.com/docs/ac/ams/payment_cashier
+///
 /// skip attributes
 /// - paymentFactor
 /// - paymentExpiryTime
@@ -67,7 +67,7 @@ pub trait HasPrivateKey {
 /// - merchantRegion
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct PaymentCashierRequest {
+pub struct CashierPaymentFull {
     /// Represents the payment product that is being used, which is stipulated in the contract. For Cashier Payment, the value is fixed as CASHIER_PAYMENT.
     pub product_code: String,
     /// The unique ID assigned by a merchant to identify a payment request. Alipay uses this field for idempotence control.
@@ -84,15 +84,15 @@ pub struct PaymentCashierRequest {
     pub env: Env,
 }
 
-impl PaymentCashierRequest {
+impl CashierPaymentFull {
     pub fn to_string(&self) -> String {
         serde_json::to_value(self).unwrap().to_string()
     }
 }
 
-impl From<&PaymentCashier> for PaymentCashierRequest {
-    fn from(value: &PaymentCashier) -> Self {
-        let PaymentCashier {
+impl From<&CashierPaymentSimple> for CashierPaymentFull {
+    fn from(value: &CashierPaymentSimple) -> Self {
+        let CashierPaymentSimple {
             payment_request_id,
             redict_url,
             notifiy_url,
@@ -117,7 +117,7 @@ impl From<&PaymentCashier> for PaymentCashierRequest {
     }
 }
 
-impl Signable for PaymentCashierRequest {
+impl Signable for CashierPaymentFull {
     fn get_value(&self) -> Value {
         serde_json::to_value(self).unwrap()
     }
@@ -150,6 +150,7 @@ impl RequestEnv {
 }
 
 /// Information about the environment where the order is placed, such as the device information.
+///
 /// skip attributes
 /// - osType
 /// - browserInfo
@@ -175,9 +176,9 @@ pub struct Env {
     terminal_type: TerminalType,
 }
 
-impl From<&PaymentCashier> for Env {
-    fn from(value: &PaymentCashier) -> Self {
-        let PaymentCashier { terminal_type, .. } = value;
+impl From<&CashierPaymentSimple> for Env {
+    fn from(value: &CashierPaymentSimple) -> Self {
+        let CashierPaymentSimple { terminal_type, .. } = value;
         let tt = terminal_type.clone().unwrap_or(TerminalType::WEB);
         Self { terminal_type: tt }
     }
@@ -213,9 +214,9 @@ impl Amount {
         self.value.parse().unwrap()
     }
 }
-impl From<&PaymentCashier> for Amount {
-    fn from(value: &PaymentCashier) -> Self {
-        let PaymentCashier {
+impl From<&CashierPaymentSimple> for Amount {
+    fn from(value: &CashierPaymentSimple) -> Self {
+        let CashierPaymentSimple {
             currency, amount, ..
         } = value;
         Self {
@@ -226,6 +227,7 @@ impl From<&PaymentCashier> for Amount {
 }
 
 /// The payment method that is used to collect the payment by the merchant or acquirer.
+///
 /// skip attributes
 /// - paymentMethodId
 /// - paymentMethodMetaData
@@ -240,8 +242,8 @@ pub struct PaymentMethod {
     pub payment_method_type: String,
 }
 
-impl From<&PaymentCashier> for PaymentMethod {
-    fn from(value: &PaymentCashier) -> Self {
+impl From<&CashierPaymentSimple> for PaymentMethod {
+    fn from(value: &CashierPaymentSimple) -> Self {
         Self {
             payment_method_type: String::from("ALIPAY_CN"),
         }
@@ -251,6 +253,7 @@ impl From<&PaymentCashier> for PaymentMethod {
 /// The order information, such as buyer, merchant, goods, amount, shipping information, and purchase environment. This field is used for different purposes:
 /// During the payment process, this field is mainly used by Alipay for risk control or anti-money laundering.
 /// After the payment is completed, this field is used for recording and reporting purposes such as purchase tracking and regulatory reporting.
+///
 /// skip attributes
 /// - goods
 /// - buyer
@@ -265,9 +268,9 @@ pub struct Order {
     pub reference_order_id: String,
 }
 
-impl From<&PaymentCashier> for Order {
-    fn from(value: &PaymentCashier) -> Self {
-        let PaymentCashier {
+impl From<&CashierPaymentSimple> for Order {
+    fn from(value: &CashierPaymentSimple) -> Self {
+        let CashierPaymentSimple {
             reference_order_id,
             order_description,
             ..
@@ -291,9 +294,9 @@ pub struct SettlementStrategy {
     settlement_currency: String,
 }
 
-impl From<&PaymentCashier> for SettlementStrategy {
-    fn from(value: &PaymentCashier) -> Self {
-        let PaymentCashier { currency, .. } = value;
+impl From<&CashierPaymentSimple> for SettlementStrategy {
+    fn from(value: &CashierPaymentSimple) -> Self {
+        let CashierPaymentSimple { currency, .. } = value;
 
         Self {
             settlement_currency: currency.clone(),
@@ -301,10 +304,7 @@ impl From<&PaymentCashier> for SettlementStrategy {
     }
 }
 
-///
-/// skip attributes
-///
-///
+/// Alipay Response
 #[derive(Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct Response {
@@ -365,6 +365,11 @@ impl ResponseResult {
         if self.result_code == ResultCode::PAYMENT_IN_PROCESS {
             // payment in process will have a result status code as U
             return None;
+        } else if self.result_code == ResultCode::UNKNOWN_EXCEPTION {
+            // First of all, this result code gives no information.
+            // When you encounter this error, you should just retry,
+            // this happens alot in sandbox environment.
+            return Some(Error::Unknown(format!("{}: {}", self.result_code.to_string(), "You should just retry. This error is very normal due to unstable service of Alipay Global. This could happen even when you have all the argument correct. Just retry.")));
         }
         match self.result_status {
             ResultStatus::S => None,
