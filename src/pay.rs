@@ -1,7 +1,9 @@
+use std::str::FromStr;
+
 use super::errors::Error;
-use super::models::{AlipayClientSecret, CashierPaymentSimple, RequestEnv, Response, Signable};
+use super::models::{AlipayClientSecret, CashierPaymentSimple, RequestEnv, Response, Signable, AlipayAction};
 use super::response::parse_response;
-use super::sign::sign;
+use super::sign::{sign};
 use crate::models::CashierPaymentFull;
 use chrono::{self};
 use rsa::Hash;
@@ -14,10 +16,11 @@ pub fn cashier_payment(
     secret: &AlipayClientSecret,
     cashier_payment: &CashierPaymentSimple,
 ) -> Result<Response, Error> {
+    let utc_now = chrono::Utc::now();
     let request_env = RequestEnv::from(secret);
     let request_url = request_env.get_request_url();
     let payment_cashier_request = CashierPaymentFull::from(cashier_payment);
-    let signed = sign("POST", secret, &payment_cashier_request);
+    let signed = sign("POST", utc_now, secret, &payment_cashier_request);
 
     let resp = ureq::post(&request_url)
         .set("Content-Type", "application/json")
@@ -32,7 +35,7 @@ pub fn cashier_payment(
         .set("client-id", &secret.client_id)
         .set(
             "Request-Time",
-            &chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, false),
+            &utc_now.to_rfc3339_opts(chrono::SecondsFormat::Secs, false),
         )
         .send_string(&payment_cashier_request.to_string())?;
     let response_body = resp.into_string().map_err(|e| Error::from(e))?;
@@ -54,6 +57,7 @@ mod tests {
         let private_key_pem_path =
             std::env::var("PEM_PATH").expect("Missing PEM_PATH environment variable");
         let secret = AlipayClientSecret {
+            action: AlipayAction::PAY,
             client_id: String::from(client_id),
             sandbox: true,
             private_key_pem: None,

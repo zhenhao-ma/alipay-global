@@ -8,12 +8,31 @@ use std::path::PathBuf;
 use std::string::ToString;
 use strum_macros::Display;
 
+
+pub enum AlipayAction {
+    PAY,
+    REFUND,
+    INQUIRY,
+}
+
+impl ToString for AlipayAction {
+    fn to_string(&self) -> String {
+        match self {
+            AlipayAction::PAY => String::from("pay"),
+            AlipayAction::REFUND => String::from("refund"),
+            AlipayAction::INQUIRY => String::from("inquiryPayment")
+        }
+    }
+}
+
 /// Alipay Client Info and Secret
 pub struct AlipayClientSecret {
+    pub action: AlipayAction,
     pub client_id: String,
     pub sandbox: bool,
     pub private_key_pem: Option<String>,
     pub private_key_pem_file: Option<Box<PathBuf>>,
+    // pub alipay_public_key_pem: String,
 }
 
 impl HasPrivateKey for AlipayClientSecret {
@@ -31,6 +50,14 @@ impl HasPrivateKey for AlipayClientSecret {
         return RSAPrivateKey::from_pkcs1(&der_bytes);
     }
 }
+
+// impl HasPublicKey for AlipayClientSecret {
+//     fn get_public_key(&self) -> Result<RSAPublicKey, RSAError> {
+//         let der_bytes = base64::decode(&self.alipay_public_key_pem).expect("failed to decode base64 content");
+//         let public_key = RSAPublicKey::from_pkcs8(&der_bytes);
+//         return public_key;
+//     }
+// }
 
 /// Minimum Information to initialize a payment cashier
 #[derive(Serialize)]
@@ -54,6 +81,10 @@ pub trait Signable {
 pub trait HasPrivateKey {
     fn get_private_key(&self) -> Result<RSAPrivateKey, RSAError>;
 }
+
+// pub trait HasPublicKey {
+//     fn get_public_key(&self) -> Result<RSAPublicKey, RSAError>;
+// }
 
 /// Payment Cashier Request Object
 /// see: https://global.alipay.com/docs/ac/ams/payment_cashier
@@ -131,12 +162,12 @@ impl From<&AlipayClientSecret> for RequestEnv {
     fn from(value: &AlipayClientSecret) -> Self {
         if value.sandbox {
             Self {
-                path: String::from("/ams/sandbox/api/v1/payments/pay"),
+                path: String::from(format!("/ams/sandbox/api/v1/payments/{}", value.action.to_string())),
                 domain: String::from("https://open-global.alipay.com"),
             }
         } else {
             Self {
-                path: String::from("/ams/api/v1/payments/pay"),
+                path: String::from(format!("/ams/api/v1/payments/{}", value.action.to_string())),
                 domain: String::from("https://open-global.alipay.com"),
             }
         }
@@ -193,7 +224,7 @@ pub enum TerminalType {
 }
 
 /// The order amount of the merchant that directly provides services or goods to the customer. This field is used for user consumption records display or payment results page.
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct Amount {
     /// The transaction currency that is specified in the contract. A 3-letter currency code that follows the ISO 4217 standard.
@@ -212,6 +243,9 @@ pub struct Amount {
 impl Amount {
     pub fn value(&self) -> u32 {
         self.value.parse().unwrap()
+    }
+    pub fn currency(&self) -> String {
+        self.currency.clone()
     }
 }
 impl From<&CashierPaymentSimple> for Amount {
@@ -304,8 +338,8 @@ impl From<&CashierPaymentSimple> for SettlementStrategy {
     }
 }
 
-/// Alipay Response
-#[derive(Deserialize, Debug)]
+/// Alipay Pay Response
+#[derive(Serialize, Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct Response {
     result: ResponseResult,
@@ -325,7 +359,25 @@ pub struct Response {
     normal_url: Option<String>,
     scheme_url: Option<String>,
     payment_result_info: Option<PaymentResultInfo>,
+    refund_amount: Option<RefundAmount>,
+    refund_time: Option<DateTime<Utc>>,
+    refund_request_id: Option<String>,
+    refund_id: Option<String>,
+    payment_status: Option<PaymentStatus>,
+    payment_result_code: Option<String>,
+    payment_result_message: Option<String>,
+    payment_time: Option<DateTime<Utc>>,
+    redirect_action_form: Option<RedirectActionForm>,
+    acquirer_reference_no: Option<String>,
+    transactions: Option<Vec<Transactions>>,
+    customs_declaration_amount: Option<Amount>,
 }
+
+// impl Signable for Response {
+//     fn get_value(&self) -> Value {
+//         serde_json::to_value(self).unwrap()
+//     }
+// }
 
 impl Response {
     pub fn result(&self) -> &ResponseResult {
@@ -346,10 +398,49 @@ impl Response {
     pub fn get_error(&self) -> Option<Error> {
         self.result.get_error()
     }
+    pub fn get_payment_create_time(&self) -> Option<DateTime<Utc>> {
+        self.payment_create_time
+    }
+    pub fn get_normal_url(&self) -> &Option<String> {
+        &self.normal_url
+    }
+    pub fn get_order_code_form(&self) -> &Option<OrderCodeForm> {
+        &self.order_code_form
+    }
+    pub fn get_refund_amount(&self) -> &Option<RefundAmount> {
+        &self.refund_amount
+    }
+    pub fn get_refund_time(&self) -> &Option<DateTime<Utc>> {
+        &self.refund_time
+    }
+    pub fn get_refund_request_id(&self) -> &Option<String> {
+        &self.refund_request_id
+    }
+    pub fn get_refund_id(&self) -> &Option<String> {
+        &self.refund_id
+    }
+    pub fn get_payment_status(&self) -> &Option<PaymentStatus> {
+        &self.payment_status
+    }
+    pub fn get_payment_result_code(&self) -> &Option<String> {
+        &self.payment_result_code
+    }
+    pub fn get_payment_result_message(&self) -> &Option<String> {
+        &self.payment_result_message
+    }
+    pub fn get_payment_time(&self) -> &Option<DateTime<Utc>> {
+        &self.payment_time
+    }
+    pub fn get_transactions(&self) -> &Option<Vec<Transactions>> {
+        &self.transactions
+    }
+    pub fn get_payment_amount(&self) -> &Option<Amount> {
+        &self.payment_amount
+    }
 }
 
 /// The result of the API call.
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Serialize, Debug, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct ResponseResult {
     /// Result code. The result code that might be returned are listed in the Result/Error codes table on this page.
@@ -379,7 +470,7 @@ impl ResponseResult {
     }
 }
 
-#[derive(Debug, Deserialize, Serialize, PartialEq, Eq, Display)]
+#[derive(Debug, Deserialize, Serialize, PartialEq, Eq, Display, Clone)]
 pub enum ResultCode {
     SUCCESS,
     ACCESS_DENIED,
@@ -430,7 +521,7 @@ pub enum ResultCode {
 /// S: Indicates that the API call succeeds.
 /// F: Indicates that the API call fails.
 /// U: Indicates that the API call might be successful, in process, or failed. For more details, see Result process logic.
-#[derive(Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Deserialize, Serialize, Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ResultStatus {
     S,
     F,
@@ -438,7 +529,7 @@ pub enum ResultStatus {
 }
 /// Information about the order code.
 /// This parameter is returned when the payment method supports providing the related information.  
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct OrderCodeForm {
     expire_time: chrono::DateTime<chrono::Utc>,
@@ -449,14 +540,14 @@ pub struct OrderCodeForm {
 /// Details about the code.
 /// More information about this field:
 /// Maximum size: 4 elements
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CodeDetail {
     code_value: String,
     display_type: DisplayType,
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct PspCustomerInfo {
     psp_name: Option<String>,
@@ -464,7 +555,7 @@ pub struct PspCustomerInfo {
     display_customer_id: Option<String>,
 }
 
-#[derive(Serialize, Deserialize, Debug, PartialEq, Eq)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Clone)]
 pub enum DisplayType {
     TEXT,
     MIDDLEIMAGE,
@@ -473,7 +564,7 @@ pub enum DisplayType {
 }
 
 /// The exchange rate between the settlement currency and transaction currency. This field is returned when grossSettlementAmount is returned.
-#[derive(Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct SettlementQuote {
     guaranteed: Option<bool>,
@@ -486,10 +577,147 @@ pub struct SettlementQuote {
 
 /// The payment result information.
 /// This parameter may be returned when the value of paymentMethodType is CARD.  
-#[derive(Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct PaymentResultInfo {
     avs_result_raw: Option<String>,
     cvv_result_raw: Option<String>,
     network_transaction_id: Option<String>,
+}
+
+#[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Clone)]
+pub enum PaymentStatus {
+    SUCCESS,
+    FAIL,
+    PROCESSING,
+    CANCELLED,
+    PENDING,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct RedirectActionForm {
+    method: RedirectActionFormMethod,
+    parameters: Option<String>,
+    redirect_url: String,
+    action_form_type: Option<String>,
+}
+
+#[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Clone)]
+pub enum RedirectActionFormMethod {
+    POST,
+    GET,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct Transactions {
+    transaction_result: ResponseResult,
+    transaction_id: String,
+    transaction_type: String,
+    transaction_status: String,
+    transaction_amount: Amount,
+    transaction_request_id: String,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CashierPaymentRefundSimple {
+    pub refund_request_id: String,
+    pub payment_id: String,
+    pub amount: i32,
+    pub currency: String,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct RefundAmount {
+    value: String,
+    currency: String,
+}
+
+impl From<&CashierPaymentRefundSimple> for RefundAmount {
+    fn from(value: &CashierPaymentRefundSimple) -> Self {
+        let CashierPaymentRefundSimple {
+            amount,
+            currency,
+            ..
+        } = value;
+        Self {
+            value: amount.to_string().clone(),
+            currency: currency.clone(),
+        }
+    }
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CashierPaymentRefundFull {
+    payment_id: String,
+    refund_request_id: String,
+    refund_amount: RefundAmount,
+}
+
+impl CashierPaymentRefundFull {
+    pub fn to_string(&self) -> String {
+        serde_json::to_value(self).unwrap().to_string()
+    }
+}
+
+impl From<&CashierPaymentRefundSimple> for CashierPaymentRefundFull {
+    fn from(value: &CashierPaymentRefundSimple) -> Self {
+        let CashierPaymentRefundSimple {
+            refund_request_id,
+            payment_id,
+            ..
+        } = value;
+        let refund_amount = RefundAmount::from(value);
+        Self {
+            payment_id: payment_id.clone(),
+            refund_request_id: refund_request_id.clone(),
+            refund_amount: refund_amount
+        }
+    }
+}
+
+impl Signable for CashierPaymentRefundFull {
+    fn get_value(&self) -> Value {
+        serde_json::to_value(self).unwrap()
+    }
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CashierPaymentInquiry {
+    pub payment_request_id: Option<String>,
+    pub payment_id: Option<String>
+}
+
+impl CashierPaymentInquiry {
+    pub fn to_string(&self) -> String {
+        serde_json::to_value(self).unwrap().to_string()
+    }
+}
+
+impl Signable for CashierPaymentInquiry {
+    fn get_value(&self) -> Value {
+        serde_json::to_value(self).unwrap()
+    }
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct CaptureAmount {
+    currency: String,
+    value: String,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct NotifyCapture {
+    capture_amount: CaptureAmount,
+    notify_type: String,
+    capture_id: String,
+    capture_request_id: String,
+    capture_time: String,
+    payment_id: String,
+    result: ResponseResult
 }

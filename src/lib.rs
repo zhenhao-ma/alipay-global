@@ -38,5 +38,7 @@ pub use rsa::Hash;
 pub mod errors;
 pub mod models;
 pub mod pay;
+pub mod refund;
+pub mod inquiry;
 mod response;
 mod sign;

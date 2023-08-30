@@ -3,3 +3,4 @@
 *.pem
 *__devonly__*
 *.env
+.idea
