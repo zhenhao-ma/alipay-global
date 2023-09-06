@@ -32,7 +32,6 @@
 //! // Call the API
 //! let r = cashier_payment(&secret, &p);
 //! ```
-extern crate crypto;
 extern crate rsa;
 pub use rsa::Hash;
 pub mod errors;

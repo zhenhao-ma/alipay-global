@@ -1,6 +1,6 @@
 use super::errors::Error;
 use super::models::{Response, AlipayClientSecret, CashierPaymentRefundSimple, CashierPaymentRefundFull, RequestEnv};
-use super::sign::sign;
+use super::sign::{sign,verify};
 use super::response::parse_response;
 
 pub fn cashier_payment(
@@ -28,7 +28,18 @@ pub fn cashier_payment(
             &utc_now.to_rfc3339_opts(chrono::SecondsFormat::Secs, false),
         )
         .send_string(&payment_cashier_refund_request.to_string())?;
+    let header_signature = resp.header("Signature").unwrap().to_string();
+    let response_time = resp.header("Response-Time").unwrap().to_string();
+    let client_id = resp.header("Client-Id").unwrap().to_string();
     let response_body = resp.into_string().map_err(|e| Error::from(e))?;
-    println!("response_body: {}", response_body);
+    let verify = verify(
+            "POST",
+            response_time.as_str(),
+            header_signature.as_str(),
+            client_id.as_str(),
+            response_body.as_str(),
+            secret
+        )
+        .map_err(|_| Error::Fail(String::from("response verification failed")))?;
     parse_response(response_body)
 }

@@ -1,12 +1,18 @@
 use super::errors::Error;
+use base64::Engine;
 use chrono::{DateTime, Utc};
-use rsa::{errors::Error as RSAError, RSAPrivateKey};
+use rsa::{
+    pkcs1::{DecodeRsaPrivateKey, Error as Pkcs1Error}, pkcs8::{DecodePublicKey, spki::Error as Pkcs8Error},
+    Hash, PaddingScheme, PublicKey, RsaPrivateKey,
+    RsaPublicKey
+};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::fs::read_to_string;
 use std::path::PathBuf;
 use std::string::ToString;
 use strum_macros::Display;
+// use std::io::{Error as StdError, Result, ErrorKind};
 
 
 pub enum AlipayAction {
@@ -32,32 +38,96 @@ pub struct AlipayClientSecret {
     pub sandbox: bool,
     pub private_key_pem: Option<String>,
     pub private_key_pem_file: Option<Box<PathBuf>>,
-    // pub alipay_public_key_pem: String,
+    pub alipay_public_key_pem: Option<String>,
+    pub alipay_public_key_pem_file: Option<Box<PathBuf>>,
 }
 
 impl HasPrivateKey for AlipayClientSecret {
-    fn get_private_key(&self) -> Result<RSAPrivateKey, RSAError> {
-        let der_bytes: Vec<u8>;
+    fn get_private_key(&self) -> Result<RsaPrivateKey, Pkcs1Error> {
+        let key: String;
         if (self.private_key_pem_file.is_some()) {
             let s = read_to_string(self.private_key_pem_file.clone().unwrap().as_path()).unwrap();
-            der_bytes = base64::decode(s).expect("failed to decode base64 content");
+            key = s;
         } else {
-            der_bytes = base64::decode(&self.private_key_pem.clone().unwrap())
-                .expect("failed to decode base64 content");
+            key = format_pkcs1_private_key(&self.private_key_pem.clone().unwrap());
         }
 
         // get private obj
-        return RSAPrivateKey::from_pkcs1(&der_bytes);
+        load_private_key(&key)
     }
 }
 
-// impl HasPublicKey for AlipayClientSecret {
-//     fn get_public_key(&self) -> Result<RSAPublicKey, RSAError> {
-//         let der_bytes = base64::decode(&self.alipay_public_key_pem).expect("failed to decode base64 content");
-//         let public_key = RSAPublicKey::from_pkcs8(&der_bytes);
-//         return public_key;
-//     }
-// }
+impl HasPublicKey for AlipayClientSecret {
+    fn get_public_key(&self) -> Result<RsaPublicKey, Pkcs8Error> {
+        let key: String;
+        if (self.alipay_public_key_pem_file.is_some()) {
+            let s = read_to_string(self.alipay_public_key_pem_file.clone().unwrap().as_path()).unwrap();
+            key = s;
+        } else {
+            key = format_pem_public_key(&self.alipay_public_key_pem.clone().unwrap());
+        }
+
+        // get private obj
+        load_public_key(&key)
+    }
+}
+
+pub fn load_private_key(private_key_str: &str) -> Result<RsaPrivateKey, Pkcs1Error> {
+    RsaPrivateKey::from_pkcs1_pem(&private_key_str)
+}
+
+pub fn load_public_key(public_key_str: &str) -> Result<RsaPublicKey, Pkcs8Error> {
+    RsaPublicKey::from_public_key_pem(&public_key_str)
+}
+
+const PUBLIC_KEY_PREFIX: &str = "-----BEGIN PUBLIC KEY-----";
+const PUBLIC_KEY_SUFFIX: &str = "-----END PUBLIC KEY-----";
+
+const PKCS1_PREFIX: &str = "-----BEGIN RSA PRIVATE KEY-----";
+const PKCS1_SUFFIX: &str = "-----END RSA PRIVATE KEY-----";
+
+const PKCS8_PREFIX: &str = "-----BEGIN PRIVATE KEY-----";
+const PKCS8_SUFFIX: &str = "-----END PRIVATE KEY-----";
+
+pub fn format_pkcs1_private_key(raw: &str) -> String {
+    format_key(raw, PKCS1_PREFIX, PKCS1_SUFFIX, 64)
+}
+
+pub fn format_pkcs8_private_key(raw: &str) -> String {
+    format_key(raw, PKCS8_PREFIX, PKCS8_SUFFIX, 64)
+}
+
+pub fn format_pem_public_key(raw: &str) -> String {
+    format_key(raw, PUBLIC_KEY_PREFIX, PUBLIC_KEY_SUFFIX, 64)
+}
+
+fn format_key(raw: &str, prefix: &str, suffix: &str, line_count: usize) -> String {
+    let mut buffer = Vec::new();
+    buffer.append(prefix.as_bytes().to_vec().as_mut());
+    buffer.append("\n".as_bytes().to_vec().as_mut());
+    let raw_len = line_count;
+    let key_len = raw.len();
+    let mut raws = key_len / raw_len;
+    let temp = key_len % raw_len;
+    if temp > 0 {
+        raws += 1;
+    }
+    let mut start = 0;
+    let mut end = start + raw_len;
+    for i in 0..raws {
+        if i == raws - 1 {
+            buffer.append(raw.get(start..).unwrap().as_bytes().to_vec().as_mut());
+        } else {
+            buffer.append(raw.get(start..end).unwrap().as_bytes().to_vec().as_mut());
+        }
+        buffer.append("\n".as_bytes().to_vec().as_mut());
+        start += raw_len;
+        end = start + raw_len
+    }
+    buffer.append(suffix.as_bytes().to_vec().as_mut());
+    buffer.append("\n".as_bytes().to_vec().as_mut());
+    String::from_utf8(buffer.clone()).unwrap()
+}
 
 /// Minimum Information to initialize a payment cashier
 #[derive(Serialize)]
@@ -79,12 +149,12 @@ pub trait Signable {
 
 /// A Trait contains private key data
 pub trait HasPrivateKey {
-    fn get_private_key(&self) -> Result<RSAPrivateKey, RSAError>;
+    fn get_private_key(&self) -> Result<RsaPrivateKey, Pkcs1Error>;
 }
 
-// pub trait HasPublicKey {
-//     fn get_public_key(&self) -> Result<RSAPublicKey, RSAError>;
-// }
+pub trait HasPublicKey {
+    fn get_public_key(&self) -> Result<RsaPublicKey, Pkcs8Error>;
+}
 
 /// Payment Cashier Request Object
 /// see: https://global.alipay.com/docs/ac/ams/payment_cashier
