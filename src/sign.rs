@@ -127,6 +127,5 @@ pub(crate) fn verify(
     println!("content: {}", content);
     let signature: Vec<&str> = header_signature.split("signature=").collect();
     let urldecoded_sig = urlencoding::decode(signature[1]).unwrap().into_owned();
-    println!("urldecoded_sig: {}", urldecoded_sig);
     rsa_verify(&content, &urldecoded_sig, secret, Some(Hash::SHA2_256))
 }

@@ -416,6 +416,7 @@ pub struct Response {
     payment_request_id: Option<String>,
     payment_id: Option<String>,
     payment_amount: Option<Amount>,
+    actual_payment_amount: Option<Amount>,
     payment_data: Option<String>,
     payment_create_time: Option<DateTime<Utc>>,
     psp_customer_info: Option<PspCustomerInfo>,
@@ -507,6 +508,9 @@ impl Response {
     pub fn get_payment_amount(&self) -> &Option<Amount> {
         &self.payment_amount
     }
+    pub fn get_actual_payment_amount(&self) -> &Option<Amount> {
+        &self.actual_payment_amount
+    }
 }
 
 /// The result of the API call.
@@ -519,12 +523,6 @@ pub struct ResponseResult {
     pub result_code: ResultCode,
     pub result_status: ResultStatus,
     pub result_message: String,
-}
-
-impl Signable for ResponseResult {
-    fn get_value(&self) -> Value {
-        serde_json::to_value(self).unwrap()
-    }
 }
 
 impl ResponseResult {
@@ -826,4 +824,16 @@ pub struct WebhookResponseInput {
     pub method: String,
     pub path: String,
     pub client_id: String,
+}
+
+#[derive(Deserialize, Serialize, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct WebhookResponseResult {
+    pub result: ResponseResult,
+}
+
+impl Signable for WebhookResponseResult {
+    fn get_value(&self) -> Value {
+        serde_json::to_value(self).unwrap()
+    }
 }
