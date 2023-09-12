@@ -10,7 +10,14 @@ pub fn cashier_payment(
     let utc_now = chrono::Utc::now();
     let request_env = RequestEnv::from(secret);
     let request_url = request_env.get_request_url();
-    let signed = sign("POST", utc_now, secret, cashier_payment_inquiry);
+    let signed = sign(
+        "POST",
+        None,
+        None,
+        utc_now,
+        secret,
+        cashier_payment_inquiry
+    );
     let resp = ureq::post(&request_url)
         .set("Content-Type", "application/json")
         .set(
@@ -32,6 +39,7 @@ pub fn cashier_payment(
     let client_id = resp.header("Client-Id").unwrap().to_string();
     let response_body = resp.into_string().map_err(|e| Error::from(e))?;
     let verify = verify(
+            None,
             "POST",
             response_time.as_str(),
             header_signature.as_str(),

@@ -65,14 +65,27 @@ fn get_alipay_raw_request(
     )
 }
 /// Sign a request
-pub(crate) fn sign(method: &str, utc: chrono::DateTime<chrono::Utc>, secret: &AlipayClientSecret, signable: &impl Signable) -> String {
+pub(crate) fn sign(
+    method: &str,
+    sign_path: Option<String>,
+    sign_client_id: Option<String>,
+    utc: chrono::DateTime<chrono::Utc>,
+    secret: &AlipayClientSecret,
+    signable: &impl Signable
+) -> String {
     let RequestEnv { path, .. } = RequestEnv::from(secret);
     let AlipayClientSecret { client_id, .. } = secret;
 
     // let utc = chrono::Utc::now();
     let iso_utc = utc.to_rfc3339_opts(chrono::SecondsFormat::Secs, false);
 
-    let content = get_alipay_raw_request(method, &path, &client_id, &iso_utc, signable);
+    let content = get_alipay_raw_request(
+        method,
+        sign_path.unwrap_or(path).as_str(),
+        sign_client_id.unwrap_or(client_id.to_owned()).as_str(),
+        &iso_utc,
+        signable
+    );
     rsa_sign(&content, secret, Some(Hash::SHA2_256))
 }
 
@@ -93,10 +106,24 @@ fn get_alipay_raw_response(
     )
 }
 
-pub(crate) fn verify(method: &str, response_time: &str, header_signature: &str, client_id: &str, response_body: &str, secret: &AlipayClientSecret) -> Result<()> {
+pub(crate) fn verify(
+    verify_path: Option<String>,
+    method: &str,
+    response_time: &str,
+    header_signature: &str,
+    client_id: &str,
+    response_body: &str,
+    secret: &AlipayClientSecret
+) -> Result<()> {
     let RequestEnv { path, .. } = RequestEnv::from(secret);
 
-    let content = get_alipay_raw_response(method, &path, client_id, response_time, response_body);
+    let content = get_alipay_raw_response(
+        method,
+        verify_path.unwrap_or(path).as_str(),
+        client_id,
+        response_time,
+        response_body
+    );
     println!("content: {}", content);
     let signature: Vec<&str> = header_signature.split("signature=").collect();
     let urldecoded_sig = urlencoding::decode(signature[1]).unwrap().into_owned();

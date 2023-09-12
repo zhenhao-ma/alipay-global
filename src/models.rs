@@ -516,9 +516,15 @@ pub struct ResponseResult {
     /// Result code. The result code that might be returned are listed in the Result/Error codes table on this page.
     /// More information about this field:
     /// Maximum length: 64 characters
-    result_code: ResultCode,
-    result_status: ResultStatus,
-    result_message: String,
+    pub result_code: ResultCode,
+    pub result_status: ResultStatus,
+    pub result_message: String,
+}
+
+impl Signable for ResponseResult {
+    fn get_value(&self) -> Value {
+        serde_json::to_value(self).unwrap()
+    }
 }
 
 impl ResponseResult {
@@ -779,19 +785,45 @@ impl Signable for CashierPaymentInquiry {
     }
 }
 
-#[derive(Serialize, Deserialize)]
-pub struct CaptureAmount {
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct PaymentAmount {
     currency: String,
     value: String,
 }
 
-#[derive(Serialize, Deserialize)]
-pub struct NotifyCapture {
-    capture_amount: CaptureAmount,
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct NotifyPayment {
+    capture_amount: PaymentAmount,
     notify_type: String,
     capture_id: String,
     capture_request_id: String,
     capture_time: String,
     payment_id: String,
     result: ResponseResult
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct WebhookData {
+    pub method: String,
+    pub path: String,
+    pub request_time: String,
+    pub header_signature: String,
+    pub client_id: String,
+    pub request_body: String,
+}
+
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct WebhookResponse {
+    pub full_signature: String,
+    pub client_id: String,
+    pub response_time: String,
+    pub body: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct WebhookResponseInput {
+    pub method: String,
+    pub path: String,
+    pub client_id: String,
 }
