@@ -1,10 +1,11 @@
 use super::errors::Error;
 use base64::Engine;
 use chrono::{DateTime, Utc};
+use juniper::{GraphQLEnum, GraphQLObject};
 use rsa::{
-    pkcs1::{DecodeRsaPrivateKey, Error as Pkcs1Error}, pkcs8::{DecodePublicKey, spki::Error as Pkcs8Error},
-    Hash, PaddingScheme, PublicKey, RsaPrivateKey,
-    RsaPublicKey
+    pkcs1::{DecodeRsaPrivateKey, Error as Pkcs1Error},
+    pkcs8::{spki::Error as Pkcs8Error, DecodePublicKey},
+    Hash, PaddingScheme, PublicKey, RsaPrivateKey, RsaPublicKey,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -13,7 +14,6 @@ use std::path::PathBuf;
 use std::string::ToString;
 use strum_macros::Display;
 // use std::io::{Error as StdError, Result, ErrorKind};
-
 
 pub enum AlipayAction {
     PAY,
@@ -26,7 +26,7 @@ impl ToString for AlipayAction {
         match self {
             AlipayAction::PAY => String::from("pay"),
             AlipayAction::REFUND => String::from("refund"),
-            AlipayAction::INQUIRY => String::from("inquiryPayment")
+            AlipayAction::INQUIRY => String::from("inquiryPayment"),
         }
     }
 }
@@ -61,7 +61,8 @@ impl HasPublicKey for AlipayClientSecret {
     fn get_public_key(&self) -> Result<RsaPublicKey, Pkcs8Error> {
         let key: String;
         if (self.alipay_public_key_pem_file.is_some()) {
-            let s = read_to_string(self.alipay_public_key_pem_file.clone().unwrap().as_path()).unwrap();
+            let s =
+                read_to_string(self.alipay_public_key_pem_file.clone().unwrap().as_path()).unwrap();
             key = s;
         } else {
             key = format_pem_public_key(&self.alipay_public_key_pem.clone().unwrap());
@@ -232,7 +233,10 @@ impl From<&AlipayClientSecret> for RequestEnv {
     fn from(value: &AlipayClientSecret) -> Self {
         if value.sandbox {
             Self {
-                path: String::from(format!("/ams/sandbox/api/v1/payments/{}", value.action.to_string())),
+                path: String::from(format!(
+                    "/ams/sandbox/api/v1/payments/{}",
+                    value.action.to_string()
+                )),
                 domain: String::from("https://open-global.alipay.com"),
             }
         } else {
@@ -246,7 +250,7 @@ impl From<&AlipayClientSecret> for RequestEnv {
 
 impl RequestEnv {
     pub fn get_request_url(&self) -> String {
-        self.domain.clone() + &self.path
+        self.domain.clone() + self.path.as_str()
     }
 }
 
@@ -609,6 +613,7 @@ pub enum ResultStatus {
 /// This parameter is returned when the payment method supports providing the related information.  
 #[derive(Deserialize, Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "juniper", derive(GraphQLObject))]
 pub struct OrderCodeForm {
     expire_time: chrono::DateTime<chrono::Utc>,
     code_details: Vec<CodeDetail>,
@@ -620,6 +625,7 @@ pub struct OrderCodeForm {
 /// Maximum size: 4 elements
 #[derive(Deserialize, Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "juniper", derive(GraphQLObject))]
 pub struct CodeDetail {
     code_value: String,
     display_type: DisplayType,
@@ -634,6 +640,7 @@ pub struct PspCustomerInfo {
 }
 
 #[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Clone)]
+#[cfg_attr(feature = "juniper", derive(GraphQLEnum))]
 pub enum DisplayType {
     TEXT,
     MIDDLEIMAGE,
@@ -717,9 +724,7 @@ pub struct RefundAmount {
 impl From<&CashierPaymentRefundSimple> for RefundAmount {
     fn from(value: &CashierPaymentRefundSimple) -> Self {
         let CashierPaymentRefundSimple {
-            amount,
-            currency,
-            ..
+            amount, currency, ..
         } = value;
         Self {
             value: amount.to_string().clone(),
@@ -753,7 +758,7 @@ impl From<&CashierPaymentRefundSimple> for CashierPaymentRefundFull {
         Self {
             payment_id: payment_id.clone(),
             refund_request_id: refund_request_id.clone(),
-            refund_amount: refund_amount
+            refund_amount: refund_amount,
         }
     }
 }
@@ -768,7 +773,7 @@ impl Signable for CashierPaymentRefundFull {
 #[serde(rename_all = "camelCase")]
 pub struct CashierPaymentInquiry {
     pub payment_request_id: Option<String>,
-    pub payment_id: Option<String>
+    pub payment_id: Option<String>,
 }
 
 impl CashierPaymentInquiry {
@@ -797,7 +802,7 @@ pub struct NotifyPayment {
     capture_request_id: String,
     capture_time: String,
     payment_id: String,
-    result: ResponseResult
+    result: ResponseResult,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -809,7 +814,6 @@ pub struct WebhookData {
     pub client_id: String,
     pub request_body: String,
 }
-
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct WebhookResponse {

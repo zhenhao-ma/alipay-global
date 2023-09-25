@@ -35,10 +35,11 @@
 extern crate rsa;
 pub use rsa::Hash;
 pub mod errors;
+mod integrations;
+pub mod inquiry;
 pub mod models;
 pub mod pay;
 pub mod refund;
-pub mod inquiry;
-pub mod webhook;
 mod response;
 mod sign;
+pub mod webhook;
