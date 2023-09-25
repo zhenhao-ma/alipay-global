@@ -1,7 +1,9 @@
+use std::str::FromStr;
+
 use super::errors::Error;
-use super::models::{AlipayClientSecret, CashierPaymentSimple, RequestEnv, Response, Signable};
+use super::models::{AlipayClientSecret, CashierPaymentSimple, RequestEnv, Response, Signable, AlipayAction};
 use super::response::parse_response;
-use super::sign::sign;
+use super::sign::{sign, verify};
 use crate::models::CashierPaymentFull;
 use chrono::{self};
 use rsa::Hash;
@@ -14,10 +16,18 @@ pub fn cashier_payment(
     secret: &AlipayClientSecret,
     cashier_payment: &CashierPaymentSimple,
 ) -> Result<Response, Error> {
+    let utc_now = chrono::Utc::now();
     let request_env = RequestEnv::from(secret);
     let request_url = request_env.get_request_url();
     let payment_cashier_request = CashierPaymentFull::from(cashier_payment);
-    let signed = sign("POST", secret, &payment_cashier_request);
+    let signed = sign(
+        "POST",
+        None,
+        None,
+        utc_now,
+        secret,
+        &payment_cashier_request
+    );
 
     let resp = ureq::post(&request_url)
         .set("Content-Type", "application/json")
@@ -32,11 +42,25 @@ pub fn cashier_payment(
         .set("client-id", &secret.client_id)
         .set(
             "Request-Time",
-            &chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, false),
+            &utc_now.to_rfc3339_opts(chrono::SecondsFormat::Secs, false),
         )
         .send_string(&payment_cashier_request.to_string())?;
+    let header_signature = resp.header("Signature").unwrap().to_string();
+    let response_time = resp.header("Response-Time").unwrap().to_string();
+    let client_id = resp.header("Client-Id").unwrap().to_string();
     let response_body = resp.into_string().map_err(|e| Error::from(e))?;
+    let verify = verify(
+            None,
+            "POST",
+            response_time.as_str(),
+            header_signature.as_str(),
+            client_id.as_str(),
+            response_body.as_str(),
+            secret
+        )
+        .map_err(|_| Error::Fail(String::from("response verification failed")))?;
     parse_response(response_body)
+
 }
 
 #[cfg(test)]
@@ -54,10 +78,13 @@ mod tests {
         let private_key_pem_path =
             std::env::var("PEM_PATH").expect("Missing PEM_PATH environment variable");
         let secret = AlipayClientSecret {
+            action: AlipayAction::PAY,
             client_id: String::from(client_id),
             sandbox: true,
             private_key_pem: None,
             private_key_pem_file: Some(Box::new(PathBuf::from(&private_key_pem_path))),
+            alipay_public_key_pem: None,
+            alipay_public_key_pem_file: None,
         };
         let payment_cashier = CashierPaymentSimple {
             payment_request_id: uuid::Uuid::new_v4().to_string(),
