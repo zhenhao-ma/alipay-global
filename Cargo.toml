@@ -1,11 +1,15 @@
 [package]
 name = "alipay-global"
-version = "0.1.3"
+version = "0.1.4"
 edition = "2021"
 description = "Use Alipay Global in a less painful way"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/zhenhao-ma/alipay-global"
-
+authors = [
+    "zma <bob0103779@gmail.com>",
+    "larry <larryluyy@gmail.com>",
+] # Add this line automatically
+documentation = "https://docs.rs/latest/alipay-global/latest"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
@@ -26,7 +30,7 @@ sha2 = "0.10.2"
 # [features]
 # juniper = ["dep:juniper"]
 # You can explicitly override this feature settings to includes additional dependencies
-juniper = { version = "0.15.11", features = ["uuid"], optional = true }
+juniper = { version = "0.15.11", features = ["uuid"] }
 
-# # [features]
-# juniper = ["dep:juniper"]
+[features]
+juniper = []
